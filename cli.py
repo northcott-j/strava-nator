@@ -3,8 +3,9 @@ from src.file_utils import prep_working_dir
 from src.investigate_files import investigate
 from src.exercise_manifest import build_manifest
 from src.generate_gpx import generate_gpx_files
+from src.upload_activities import upload_new_gpx
 
-SUPPORTED_METHODS = ['investigate', 'manifest', 'generate']
+SUPPORTED_METHODS = ['investigate', 'manifest', 'generate', 'upload']
 
 
 if __name__ == '__main__':
@@ -26,5 +27,7 @@ if __name__ == '__main__':
             print('NOTE :: Not all of these will have enough GPS points to upload to Strava')
         elif method == 'generate':
             generate_gpx_files(file_path)
+        elif method == 'upload':
+            upload_new_gpx(file_path)
     else:
         raise Exception(f'Unkown args: {sys.argv[1:]}')

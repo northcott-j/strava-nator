@@ -21,7 +21,7 @@ def generate_gpx_files(file_path: str):
     setup_gpx_folders(file_path, manifest.keys())
     for exercise_type, exercise_ids in manifest.items():
         exercise_count = 1
-        for exercise_id in exercise_ids:
+        for exercise_id in sorted(exercise_ids):
             exercise_files = all_exercise_files.get(exercise_id)
             exercise_name = f'{exercise_type.capitalize()} #{exercise_count} (Strava-nator)'
             gpx = _make_gpx(exercise_type, exercise_files, exercise_name)
