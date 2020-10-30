@@ -43,6 +43,7 @@ What the code does so you know I'm not being sneaky with your data...
 4) Merge all of the files together and ignore ones without lat/long data
 5) Do some grouping of timestamps to account for different GPS points in SHealth and Strava
 6) Generate GPX files and add heart rate info and cadence when available
+7) Save them under a custom directory in `data/<your zip file>/`
 
 #### How you should do it
 Run the command `python3 cli.py generate <path to zip>`
