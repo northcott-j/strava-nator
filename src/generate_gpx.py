@@ -2,9 +2,8 @@ import json
 import glob
 import datetime
 from pathlib import Path
-from base64 import b64encode
 from collections import defaultdict
-from typing import Set, Optional, Any, List, Dict
+from typing import Set, Optional, Any, List, Dict, Tuple
 from src.exercise_manifest import build_manifest
 from src.file_utils import get_exercise_files, setup_gpx_folders, save_gpx
 
@@ -20,30 +19,27 @@ def generate_gpx_files(file_path: str):
     all_exercise_files = get_exercise_files(file_path, exclude_internal=True)
     setup_gpx_folders(file_path, manifest.keys())
     for exercise_type, exercise_ids in manifest.items():
-        exercise_count = 1
-        for exercise_id in sorted(exercise_ids):
+        for exercise_id in exercise_ids:
             exercise_files = all_exercise_files.get(exercise_id)
-            exercise_name = f'{exercise_type.capitalize()} #{exercise_count} (Strava-nator)'
-            gpx = _make_gpx(exercise_type, exercise_files, exercise_name)
+            gpx_metadata, gpx = _make_gpx(exercise_type, exercise_id, exercise_files)
             if gpx:
-                exercise_id = f'{exercise_id}---{b64encode(exercise_name.encode("utf-8")).decode()}'
-                save_gpx(file_path, exercise_type, exercise_id, gpx)
-                exercise_count += 1
+                save_gpx(file_path, gpx_metadata, gpx)
 
 
-def _make_gpx(exercise_type: str, files: Set[str], exercise_name: str) -> Optional[str]:
+def _make_gpx(exercise_type: str, exercise_id: str, files: Set[str]) -> Optional[Tuple[Dict[str, str], str]]:
     """
     Make a merged GPX file if location data is available.
-    Naming convention is f'{exercise_type} #{count} (Strava-nator)'
+    Naming convention is f'{date} {exercise_type} (Strava-nator)'
 
     :param exercise_type: the type of exercise
+    :param exercise_id: id of the exercise
     :param files: list of files to open and get exercise info
-    :param exercise_name: name of this exercise
-    :return: gpx content if location data is present
+    :return: (gpx_metadata, gpx content) if location data is present
     """
     merged_data = _merge_data(files)
-    if not merged_data: return None
+    if not merged_data: return None, None
     date_string = datetime.datetime.fromtimestamp(merged_data[0]['start_time']).isoformat()
+    exercise_name = f"{datetime.datetime.fromtimestamp(merged_data[0]['start_time']).date().isoformat()} {exercise_type.capitalize()} (Strava-nator)"
     header = (
         f'<?xml version="1.0" encoding="UTF-8"?>'
         f'<gpx creator="StravaGPX" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd http://www.garmin.com/xmlschemas/GpxExtensions/v3 http://www.garmin.com/xmlschemas/GpxExtensionsv3.xsd http://www.garmin.com/xmlschemas/TrackPointExtension/v1 http://www.garmin.com/xmlschemas/TrackPointExtensionv1.xsd" version="1.1" xmlns="http://www.topografix.com/GPX/1/1" xmlns:gpxtpx="http://www.garmin.com/xmlschemas/TrackPointExtension/v1" xmlns:gpxx="http://www.garmin.com/xmlschemas/GpxExtensions/v3">'
@@ -89,10 +85,12 @@ def _make_gpx(exercise_type: str, files: Set[str], exercise_name: str) -> Option
         f'</trk>'
         f'</gpx>'
     )
-    if len(body) == 0: return None
-    print(f'Finished building {exercise_name}')
+    if len(body) == 0: return None, None
     body = "\n".join(body)
-    return f'{header}{body}{closing}'
+    print(f'Finished building {exercise_name}')
+    gpx_metadata = {'exercise_name': exercise_name, 'exercise_id': exercise_id,
+                    'exercise_type': exercise_type, 'start_time': date_string}
+    return gpx_metadata, f'{header}{body}{closing}'
 
 
 def _merge_data(files: Set[str]) -> Optional[List[Dict[str, Any]]]:
@@ -106,7 +104,7 @@ def _merge_data(files: Set[str]) -> Optional[List[Dict[str, Any]]]:
     for f in files:
         with open(f, 'r') as infile:
             data = json.load(infile)
-            if not isinstance(data, List): break
+            if not isinstance(data, List): continue
             for d in data:
                 if 'latitude' in d or 'longitude' in d: found_location_data = True
                 if 'start_time' in d:

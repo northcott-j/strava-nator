@@ -1,5 +1,6 @@
 import os
 import glob
+import json
 from pathlib import Path
 from zipfile import ZipFile
 from collections import defaultdict
@@ -91,24 +92,37 @@ def setup_gpx_folders(file_path: str, exercises: Iterable[str]):
         if not os.path.isdir(e_path): os.mkdir(e_path)
 
 
-def save_gpx(file_path: str, exercise_type: str, exercise_id: str, gpx: str):
+def save_gpx(file_path: str, gpx_metadata: Dict[str, str], gpx: str):
     """
     Saves a GPX file for a particular exercise
 
     :param file_path: path to zip
-    :param exercise_type: the type of exercise to save in correct subfolder
-    :param exercise_id: id of exercise used for naming file
+    :param gpx_metadata: metadata for this exercise and gpx file
     :param gpx: gpx content
     """
     data_path = get_data_path(file_path)
+    exercise_type = gpx_metadata['exercise_type']
     exercise_folder = Path(data_path) / STRAVANATOR_FOLDER / exercise_type
-    # NOTE :: Need to remove old files and need to use f_id without b64 info
-    f_id = exercise_id.split('--')[0]
-    for f in glob.glob(str(exercise_folder / f'{f_id}*')):
-        os.remove(f)
-    exercise_file = exercise_folder / f'{exercise_id}.gpx'
+    f_id = gpx_metadata['exercise_id']
+    exercise_file = exercise_folder / f'{f_id}.gpx'
     with open(exercise_file, 'w') as outfile:
         outfile.write(gpx)
+    metadata_file = exercise_folder / f'{f_id}.json'
+    with open(metadata_file, 'w') as outfile:
+        outfile.write(json.dumps(gpx_metadata))
+
+
+def get_gpx_metadata(gpx_path: str) -> Dict[str, str]:
+    """
+    Retrieves metadata for a gpx file
+
+    :param gpx_path: path to a gpx file
+    :return: dict containing info like exercise_id, description, exercise_type
+    """
+    gpx_path = str(Path(gpx_path))
+    metadata_path = gpx_path.replace('.gpx', '.json')
+    with open(metadata_path, 'r') as infile:
+        return json.load(infile)
 
 
 def get_upload_files(file_path: str) -> Dict[str, Set[str]]:
@@ -123,8 +137,7 @@ def get_upload_files(file_path: str) -> Dict[str, Set[str]]:
     new_files = defaultdict(set)
     for exercise_type, files in gpx_files.items():
         for f in files:
-            split_char = '/' if '/' in f else '\\'
-            f_id = f.split(split_char)[-1].split('--')[0]
+            f_id = get_gpx_metadata(f)['exercise_id']
             if f_id not in uploaded_files:
                 new_files[exercise_type].add(f)
     return new_files

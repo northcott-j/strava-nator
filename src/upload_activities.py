@@ -1,13 +1,14 @@
 import sys
 import time
 import datetime
-from base64 import b64decode
 from threading import Thread
 from stravalib import Client
-from typing import Dict, Set
+from collections import defaultdict
+from typing import Dict, Set, List, Tuple
 from src.server.server import start
-from src.file_utils import get_upload_files, mark_uploaded
 from src.constants import STRAVA_RATE_LIMIT, STRAVA_RATE_INTERVAL
+from src.file_utils import get_upload_files, mark_uploaded, get_gpx_metadata
+
 
 def upload_new_gpx(file_path: str):
     """
@@ -22,7 +23,7 @@ def upload_new_gpx(file_path: str):
     _double_check_user(c)
     new_files = get_upload_files(file_path)
     _double_check_file_counts(new_files)
-    _upload_files(new_files, c, file_path)
+    _upload_files(_sort_rename_files(new_files), c, file_path)
 
 
 def _start_oauth_server(client: Client):
@@ -73,47 +74,74 @@ def _double_check_file_counts(new_files: Dict[str, Set[str]]):
     input('Hit ctrl-c if this is wrong otherwise hit enter...')
 
 
-def _upload_files(new_files: Dict[str, Set[str]], client: Client, file_path: str):
+def _sort_rename_files(new_files: Dict[str, Set[str]]) -> List[Tuple[str, Dict[str, str]]]:
+    """
+    Takes the dict of exercise -> files and will flatten and sort them
+    It will also append number if there's an identical exercise in a day
+
+    :param new_files: dict of new files
+    :return: sorted array of (path, gpx_metadata)
+    """
+    files = set()
+    for file_set in new_files.values():
+        files.update(file_set)
+    file_name_mapping = defaultdict(list)
+    for f in files:
+        metadata = get_gpx_metadata(f)
+        file_name_mapping[metadata['exercise_name']].append((f, metadata))
+    files = []
+    for gpx_files in file_name_mapping.values():
+        if len(gpx_files) > 1:
+            gpx_files = sorted(gpx_files, key=lambda g: g[1]['start_time'])
+            count = 1
+            for path, metadata in gpx_files:
+                metadata['exercise_name'] = metadata['exercise_name'].replace('(Strava-nator)', f'#{count} (Strava-nator)')
+                count += 1
+        files.extend(gpx_files)
+    return list(sorted(files, key=lambda f: f[1]['start_time']))
+
+
+def _upload_files(new_files: List[Tuple[str, Dict[str, str]]],
+                  client: Client, file_path: str):
     """
     Upload these files to the Strava API
 
-    :param new_files: new GPX files for each exercise
+    :param new_files: list of tuples of (path, gpx_metadata)
     :param client: client instance that should now be authorized
     :param file_path: path to zip
     """
     requests_left = STRAVA_RATE_LIMIT
     interval_start_time = time.time()
-    for exercise, files in new_files.items():
-        for f in files:
-            if requests_left == 0:
-                _wait_for_reset(interval_start_time)
-                requests_left = STRAVA_RATE_LIMIT
-                interval_start_time = time.time()
-            elif _passed_reset_interval(interval_start_time):
-                requests_left = STRAVA_RATE_LIMIT
-                interval_start_time = time.time()
-            split_char = '/' if '/' in f else '\\'
-            f_id = f.split(split_char)[-1].split('--')[0]
-            f_b64 = f.split(split_char)[-1].split('--')[1].replace('.gpx', '')
-            f_description = b64decode(f_b64.encode('utf-8')).decode()
-            try:
-                print(f'Uploading {f_description}...')
-                with open(f, 'r') as infile:
-                    response = client.upload_activity(infile, 'gpx', description=f_description,
-                                                      activity_type=exercise, external_id=f_id)
-                while response.is_processing:
-                    time.sleep(5)
-                    response.poll()
-                    requests_left -= 1
-                if response.is_error:
-                    print(f'Error: {response.error}')
-                    response.raise_for_error()
-            except:
-                print(f'...failed while uploading: {f_id} ({f_description})')
-                continue
-            print(f'...finished uploading.')
-            mark_uploaded(file_path, f_id)
-            requests_left -= 1
+    for path, data in new_files:
+        if requests_left == 0:
+            _wait_for_reset(interval_start_time)
+            requests_left = STRAVA_RATE_LIMIT
+            interval_start_time = time.time()
+        elif _passed_reset_interval(interval_start_time):
+            requests_left = STRAVA_RATE_LIMIT
+            interval_start_time = time.time()
+        f_id = data['exercise_id']
+        f_name = data['exercise_name']
+        exercise = data['exercise_type']
+        try:
+            print(f'Uploading {f_name}...')
+            with open(path, 'r') as infile:
+                response = client.upload_activity(infile, 'gpx', name=f_name,
+                                                  description="Uploaded Samsung Health activity using Strava-nator",
+                                                  activity_type=exercise, external_id=f_id)
+            while response.is_processing:
+                time.sleep(5)
+                response.poll()
+                requests_left -= 1
+            if response.is_error:
+                print(f'Error: {response.error}')
+                response.raise_for_error()
+        except:
+            print(f'...failed while uploading: {f_id} ({f_name})')
+            continue
+        mark_uploaded(file_path, f_id)
+        requests_left -= 1
+
 
 
 def _wait_for_reset(start_time: float):
