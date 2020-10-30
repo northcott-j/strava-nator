@@ -31,6 +31,7 @@ Compress it as a `.zip` and find a way to get it from your phone to your compute
 
 
 (virtualenv's are good practice)
+
 (you need to create a Strava app if you want the script to upload files for you)
 
 
