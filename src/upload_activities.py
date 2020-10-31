@@ -165,7 +165,7 @@ def _passed_reset_interval(start_time: float) -> bool:
     :return: True if interval has been passed
     """
     now = datetime.datetime.now()
-    start = datetime.datetime.fromtimestamp(start_time)
+    start = datetime.datetime.utcfromtimestamp(start_time)
     if now.hour != start.hour: return True
     intervals = set(range(0, 60, STRAVA_RATE_INTERVAL))
     minutes_since = set(range(max(start.minute, 1), now.minute))

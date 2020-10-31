@@ -38,8 +38,8 @@ def _make_gpx(exercise_type: str, exercise_id: str, files: Set[str]) -> Optional
     """
     merged_data = _merge_data(files)
     if not merged_data: return None, None
-    date_string = datetime.datetime.fromtimestamp(merged_data[0]['start_time']).isoformat()
-    exercise_name = f"{datetime.datetime.fromtimestamp(merged_data[0]['start_time']).date().isoformat()} {exercise_type.capitalize()} (Strava-nator)"
+    date_string = datetime.datetime.utcfromtimestamp(merged_data[0]['start_time']).isoformat()
+    exercise_name = f"{datetime.datetime.utcfromtimestamp(merged_data[0]['start_time']).date().isoformat()} {exercise_type.capitalize()} (Strava-nator)"
     header = (
         f'<?xml version="1.0" encoding="UTF-8"?>'
         f'<gpx creator="StravaGPX" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd http://www.garmin.com/xmlschemas/GpxExtensions/v3 http://www.garmin.com/xmlschemas/GpxExtensionsv3.xsd http://www.garmin.com/xmlschemas/TrackPointExtension/v1 http://www.garmin.com/xmlschemas/TrackPointExtensionv1.xsd" version="1.1" xmlns="http://www.topografix.com/GPX/1/1" xmlns:gpxtpx="http://www.garmin.com/xmlschemas/TrackPointExtension/v1" xmlns:gpxx="http://www.garmin.com/xmlschemas/GpxExtensions/v3">'
@@ -58,7 +58,7 @@ def _make_gpx(exercise_type: str, exercise_id: str, files: Set[str]) -> Optional
         altitude = d.get('altitude')
         heart_rate = d.get('heart_rate')
         cadence = d.get('cadence')
-        start_time = datetime.datetime.fromtimestamp(d['start_time']).isoformat()
+        start_time = datetime.datetime.utcfromtimestamp(d['start_time']).isoformat()
         if latitude and longitude:
             body.append(f'<trkpt lat="{latitude}" lon="{longitude}">')
             body.append(f'<time>{start_time}</time>')
